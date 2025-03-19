@@ -24,6 +24,7 @@ class ChatSummary(Star):
         if count is None:
             yield event.plain_result("未传入要总结的聊天记录数量\n请按照「 /消息总结 [要总结的聊天记录数量] 」格式发送\n例如「 /消息总结 114 」~")
             event.stop_event()
+            return
 
         # 构造获取群消息历史的请求参数
         payloads = {
@@ -36,6 +37,9 @@ class ChatSummary(Star):
         # 调用API获取群聊历史消息
         ret = await client.api.call_action("get_group_msg_history", **payloads)
 
+        myid_post = await client.api.call_action("get_login_info", **payloads)
+        myid = myid_post.get("data", {}).get("user_id", "")
+
         # 处理消息历史记录，对其格式化
         messages = ret.get("messages", [])
         chat_lines = []
@@ -43,6 +47,8 @@ class ChatSummary(Star):
             # 解析发送者信息
             sender = msg.get('sender', {})
             nickname = sender.get('nickname', '未知用户')
+            if myid == sender.get('user_id', ""):
+                continue
             msg_time = datetime.fromtimestamp(msg.get('time', 0))  # 防止time字段缺失
             # 提取所有文本内容（兼容多段多类型文本消息）
             message_text = ""
@@ -60,6 +66,10 @@ class ChatSummary(Star):
                 # 表情消息处理
                 elif part['type'] == 'face':
                     message_text += "[表情] "
+
+            # 检查message_text的第一个字符是否为"/"，如果是则跳过当前循环（用于跳过用户调用Bot的命令）
+            if message_text.startswith("/"):
+                continue
 
             # 生成标准化的消息记录格式
             if message_text:
@@ -95,7 +105,7 @@ class ChatSummary(Star):
         # 调试模式处理逻辑
         if debug == "debug" or debug == "Debug":
             if not is_admin(str(event.get_sender_id())):  # 验证用户是否为管理员
-                yield event.plain_result("您无权使用该命令！")
+                yield event.plain_result("您无权使用Debug命令！")
                 return
             else:
                 logger.info(f"prompt: {load_prompt()}") # 调试输出prompt和llm_response到控制台
