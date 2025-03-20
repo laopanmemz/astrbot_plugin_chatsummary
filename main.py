@@ -1,11 +1,10 @@
-import os.path
+import os
 from datetime import datetime
 import json
 from astrbot.api.event import filter, AstrMessageEvent
 from astrbot.api.star import Context, Star, register
-from astrbot.api import logger
 
-@register("astrbot_plugin_chatsummary", "laopanmemz", "一个基于LLM的历史聊天记录总结插件", "1.0.2")
+@register("astrbot_plugin_chatsummary", "laopanmemz", "一个基于LLM的历史聊天记录总结插件", "1.0.3")
 # 聊天记录总结插件主类，继承自Star基类
 class ChatSummary(Star):
     # 初始化插件实例
@@ -14,7 +13,7 @@ class ChatSummary(Star):
 
     # 注册指令的装饰器。指令名为 消息总结 。注册成功后，发送 `/消息总结` 就会触发这个指令。
     @filter.command("消息总结")  # 消息历史获取与处理
-    async def summary(self, event: AstrMessageEvent, count: int = None, debug:str=None):
+    async def summary(self, event: AstrMessageEvent, count: int = None):
         """触发消息总结，命令加空格，后面跟获取聊天记录的数量即可（例如“ /消息总结 20 ”）"""
         from astrbot.core.platform.sources.aiocqhttp.aiocqhttp_message_event import AiocqhttpMessageEvent
         assert isinstance(event, AiocqhttpMessageEvent)
@@ -38,7 +37,7 @@ class ChatSummary(Star):
         ret = await client.api.call_action("get_group_msg_history", **payloads)
 
         myid_post = await client.api.call_action("get_login_info", **payloads)
-        myid = myid_post.get("data", {}).get("user_id", "")
+        myid = myid_post.get("user_id", {})
 
         # 处理消息历史记录，对其格式化
         messages = ret.get("messages", [])
@@ -78,15 +77,6 @@ class ChatSummary(Star):
         # 生成最终prompt
         msg = "\n".join(chat_lines)
 
-        # 判断是否为管理员，从配置文件加载管理员列表
-        def _load_admins():
-            with open(os.path.join('data', 'cmd_config.json'), 'r', encoding='utf-8-sig') as f:
-                config = json.load(f)
-                return config.get('admins_id', [])
-
-        def is_admin(user_id):
-            return str(user_id) in _load_admins()
-
         # LLM处理流程
         def load_prompt():
             with open(os.path.join('data','config','astrbot_plugin_chatsummary_config.json'), 'r', encoding='utf-8-sig') as a:
@@ -101,16 +91,6 @@ class ChatSummary(Star):
                 {"role": "user", "content": str(msg)}
             ],
         )
-
-        # 调试模式处理逻辑
-        if debug == "debug" or debug == "Debug":
-            if not is_admin(str(event.get_sender_id())):  # 验证用户是否为管理员
-                yield event.plain_result("您无权使用Debug命令！")
-                return
-            else:
-                logger.info(f"prompt: {load_prompt()}") # 调试输出prompt和llm_response到控制台
-                logger.info(f"llm_response: {llm_response}")
-                yield event.plain_result(str(f"prompt已通过Info Logs在控制台输出，可前往Astrbot控制台查看。以下为格式化后的聊天记录Debug输出：\n{msg}"))
 
         # 输出LLM最终总结内容，发送总结消息
         yield event.plain_result(llm_response.completion_text)
