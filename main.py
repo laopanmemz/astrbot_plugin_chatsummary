@@ -97,7 +97,7 @@ class ChatSummary(Star):
 
     @filter.event_message_type(filter.EventMessageType.PRIVATE_MESSAGE)
     @filter.command("群总结")
-    async def summary(self, event: AstrMessageEvent, count: int = None, group_id: int = None):
+    async def private_summary(self, event: AstrMessageEvent, count: int = None, group_id: int = None):
         """私聊场景触发群消息总结，命令加空格，后面跟获取聊天记录的数量和群号即可（例如“ /群总结 30 1145141919”）"""
         # 检查是否传入了要总结的聊天记录数量和群号，未传入则返回错误，并终止事件传播
         if count is None:
