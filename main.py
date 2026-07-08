@@ -1,11 +1,13 @@
-from datetime import datetime,timedelta
-import re,json
+import json
+import re
+from datetime import datetime, timedelta
 
-from astrbot.api.event import filter, AstrMessageEvent
-from astrbot.api.star import Context, Star,register
-from astrbot.api import logger,AstrBotConfig
+from astrbot.api import AstrBotConfig, logger
+from astrbot.api.event import AstrMessageEvent, filter
+from astrbot.api.star import Context, Star, register
 
-@register("astrbot_plugin_chatsummary", "laopanmemz", "一个基于LLM的历史聊天记录总结插件", "1.1.0")
+
+@register("astrbot_plugin_chatsummary", "laopanmemz", "一个基于LLM的历史聊天记录总结插件", "1.2.0")
 class ChatSummary(Star):
 
     max_count:int
@@ -17,11 +19,10 @@ class ChatSummary(Star):
         self.max_count = config.get("max_count",50)
         self.prompt = config.get("prompt","")
         self.wake_prefix = config.get("wake_prefix","")
-        logger.info(f"max_count:{self.max_count},prompt:{self.prompt[:10]},wake_prefix:{self.wake_prefix}")    
-    
+        logger.info(f"max_count:{self.max_count},prompt:{self.prompt[:10]},wake_prefix:{self.wake_prefix}")
     @filter.llm_tool(name="group_summary")
     @filter.event_message_type(filter.EventMessageType.GROUP_MESSAGE)
-    @filter.command("group_summary",alias={"群聊总结"})
+    @filter.command("group_summary",alias={"消息总结"})
     async def group_summary(self,event:AstrMessageEvent,params:str):
         """群聊场景触发消息总结
 
@@ -45,7 +46,6 @@ class ChatSummary(Star):
             count = int(params)
             payloads["count"] = count
             message_text = await self._fetch_msg_by_count(event,payloads)
-            
         else:
             time_range = self._parse_time_expr(params)
             if time_range is None:
@@ -109,7 +109,6 @@ class ChatSummary(Star):
         msg = self._format_msg(messages,bot_id)
 
         return msg
-    
     async def _fetch_msg_by_time(self,event:AstrMessageEvent,start_ts:float,end_ts:float,payloads:dict):
         """
         获取指定时间段内的消息并格式化
@@ -138,36 +137,34 @@ class ChatSummary(Star):
         logger.info(f"排除空消息之后有{len(collected)}条")
         msg = self._format_msg(collected,bot_id)
         return msg
-    
     def _format_msg(self,messages:list[dict],bot_id:str):
         """
-        获取群消息历史记录,格式化为: 
-        
+        获取群消息历史记录,格式化为:
         [时间][用户名]: 内容
         """
         chat_lines = []
         for msg in messages:  # 遍历历史消息体列表
             # 解析发送者信息
-            sender = msg.get('sender', {})
-            if bot_id == sender.get('user_id', ""): # 忽略bot的回复
+            sender = msg.get("sender", {})
+            if bot_id == sender.get("user_id", ""): # 忽略bot的回复
                 continue
-            nickname = sender.get('nickname', '未知用户')  # 拿到发送者名字
-            msg_time = datetime.fromtimestamp(msg.get('time', 0))  # 拿到发送时间
+            nickname = sender.get("nickname", "未知用户")  # 拿到发送者名字
+            msg_time = datetime.fromtimestamp(msg.get("time", 0))  # 拿到发送时间
             # 提取所有文本内容
             message_text = ""
-            for part in msg['message']:
-                if part['type'] == 'text':  # 如果遍历到的消息是纯文本，则直接拿到消息
-                    message_text += part['data']['text'].strip() + " "
-                elif part['type'] == 'json':  # 处理JSON格式的分享卡片等特殊消息
+            for part in msg["message"]:
+                if part["type"] == "text":  # 如果遍历到的消息是纯文本，则直接拿到消息
+                    message_text += part["data"]["text"].strip() + " "
+                elif part["type"] == "json":  # 处理JSON格式的分享卡片等特殊消息
                     try:
-                        json_content = json.loads(part['data']['data'])
-                        if 'desc' in json_content.get('meta', {}).get('news', {}):
+                        json_content = json.loads(part["data"]["data"])
+                        if "desc" in json_content.get("meta", {}).get("news", {}):
                             message_text += f"[分享内容]{json_content['meta']['news']['desc']} "
                     except:
                         pass
 
                 # 表情消息处理
-                elif part['type'] == 'face':
+                elif part["type"] == "face":
                     message_text += "[表情] "
 
             # 检查message_text的开头字符是否为唤醒词，如果是则跳过当前循环（用于跳过用户调用Bot的命令）
@@ -181,7 +178,6 @@ class ChatSummary(Star):
         # 生成最终内容
         msg = "\n".join(chat_lines)
         return msg
-    
     def _parse_time_expr(self,expr:str):
         """将中文时间表达式转换为时间戳格式
 
@@ -197,12 +193,11 @@ class ChatSummary(Star):
         now = datetime.now()
         today_start = now.replace(hour=0,minute=0,second=0,microsecond=0)
         yesterday_start = today_start - timedelta(days=1)
-        
 
         if expr == "今天":
-            return (today_start.timestamp(), now.timestamp(),int(1))
+            return (today_start.timestamp(), now.timestamp(),1)
         elif expr == "昨天":
-            return (yesterday_start.timestamp(), today_start.timestamp(),int(1))
+            return (yesterday_start.timestamp(), today_start.timestamp(),1)
 
         match = re.fullmatch(r"(\d+)天", expr)
         if match:
@@ -213,9 +208,8 @@ class ChatSummary(Star):
 
             start_time = today_start - timedelta(days=days-1)
             return (start_time.timestamp(), now.timestamp(),days)
-
         return None
-    
+
     async def _do_summary(self,message_text:str) -> str:
         """调用LLM生成总结内容"""
         llm_response = await self.context.get_using_provider().text_chat( #type:ignore
@@ -224,7 +218,6 @@ class ChatSummary(Star):
                 {"role": "user", "content": message_text}
             ],
         )
-        
         return llm_response.completion_text
 
 
