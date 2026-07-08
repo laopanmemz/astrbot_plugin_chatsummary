@@ -219,7 +219,3 @@ class ChatSummary(Star):
             ],
         )
         return llm_response.completion_text
-
-
-    async def terminate(self):
-        """可选择实现 terminate 函数，当插件被卸载/停用时会调用。"""
